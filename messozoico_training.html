@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Mesozoico Training</title>
+<link href="https://fonts.googleapis.com/css2?family=Creepster&display=swap" rel="stylesheet">
+
+<style>
+body{
+    margin:0;
+    padding:0;
+    font-family: 'Creepster', cursive;
+    background-color:#1E3D2D; /* verde escuro */
+    background-image: url('https://cdn.pixabay.com/photo/2017/06/10/07/21/dinosaur-2393386_1280.jpg'); /* dinossauro */
+    background-size: cover;
+    background-position: center;
+    color:white;
+    text-align:center;
+}
+
+h1, p, select, button, #resultado, #letra{
+    font-family: 'Creepster', cursive;
+}
+
+h1{
+    font-size: 48px;
+    background-color: rgba(34,139,34,0.8);
+    padding: 10px 20px;
+    border-radius: 15px;
+    display: inline-block;
+    text-shadow: 2px 2px 5px #000;
+}
+
+#letraBox{
+    display:inline-block;
+    padding:40px;
+    border:6px solid white;
+    margin-top:40px;
+    transition:0.1s;
+    position: relative;
+}
+#letra{
+    font-size:120px;
+    font-weight:bold;
+    color:yellow;
+}
+#letraTimerContainer{
+    width:100%;
+    height:10px;
+    background:#333;
+    margin-top:10px;
+    border-radius:5px;
+}
+#letraTimer{
+    height:100%;
+    width:100%;
+    transition:0.05s linear;
+    border-radius:5px;
+}
+
+#respContainer{
+    width:320px;
+    height:22px;
+    border:2px solid white;
+    margin:auto;
+    margin-top:10px;
+}
+#resp{
+    height:100%;
+    width:50%;
+    background:cyan;
+    transition:0.15s;
+}
+
+button{
+    margin-top:15px;
+    padding:10px 20px;
+    font-size:18px;
+}
+select{
+    font-size:16px;
+    padding:5px;
+    margin:5px;
+}
+</style>
+</head>
+<body>
+
+<h1>Mesozoico Training</h1>
+
+<p>Modo: 
+<select id="modoSelect">
+    <option value="normal">Normal (com bot)</option>
+    <option value="treino">Treino solo</option>
+</select>
+</p>
+
+<p>Tempo: <span id="timer">10</span></p>
+<p>Você: <span id="playerScore">0</span> | <span id="botContainer">Bot: <span id="botScore">0</span></span></p>
+
+<div id="configNormal">
+<p>Dificuldade do Bot</p>
+<select id="dificuldade">
+    <option value="facil">Fácil</option>
+    <option value="medio">Médio</option>
+    <option value="dificil">Difícil</option>
+    <option value="impossivel">Impossível</option>
+</select>
+</div>
+
+<div id="configTreino" style="display:none">
+<p>Nível de Treino</p>
+<select id="treinoNivel">
+    <option value="facil">Fácil</option>
+    <option value="medio">Médio</option>
+    <option value="dificil">Difícil</option>
+    <option value="extremo">Extremo</option>
+</select>
+</div>
+
+<p id="respLabel">Respiração do oponente</p>
+<div id="respContainer">
+    <div id="resp"></div>
+</div>
+
+<div id="letraBox">
+    <div id="letra">W</div>
+    <div id="letraTimerContainer">
+        <div id="letraTimer"></div>
+    </div>
+</div>
+
+<h2 id="resultado"></h2>
+
+<button onclick="iniciar()">Iniciar jogo</button>
+<button onclick="reiniciar()">Reiniciar</button>
+
+<script>
+let teclas=["W","A","S","D"];
+let atual="W";
+let player=0, bot=0;
+let resp=50, tempo=10, ativo=false;
+let botChance=0.8, botVel=300;
+let timerInterval, botInterval, treinoInterval, letraTimeout, letraStart, letraDur;
+
+// Modo treino / normal
+document.getElementById("modoSelect").addEventListener("change",()=>{
+    let modo = document.getElementById("modoSelect").value;
+    if(modo==="normal"){
+        document.getElementById("configNormal").style.display="block";
+        document.getElementById("configTreino").style.display="none";
+        document.getElementById("botContainer").style.display="inline";
+        document.getElementById("letraTimerContainer").style.display="none"; // oculto no normal
+        document.getElementById("respContainer").style.display="block";
+        document.getElementById("respLabel").style.display="block";
+    } else {
+        document.getElementById("configNormal").style.display="none";
+        document.getElementById("configTreino").style.display="block";
+        document.getElementById("botContainer").style.display="none";
+        document.getElementById("letraTimerContainer").style.display="block"; // só treino
+        document.getElementById("respContainer").style.display="none";
+        document.getElementById("respLabel").style.display="none"; // remove escrita
+    }
+});
+
+// Salvar configurações
+function salvarConfig(){
+    localStorage.setItem("dificuldade",document.getElementById("dificuldade").value);
+    localStorage.setItem("tempo",document.getElementById("tempoSelect").value);
+}
+document.getElementById("dificuldade").addEventListener("change",salvarConfig);
+document.getElementById("tempoSelect").addEventListener("change",salvarConfig);
+
+function aplicarDificuldade(){
+    let d=document.getElementById("dificuldade").value;
+    if(d=="facil"){botChance=0.5; botVel=500;}
+    if(d=="medio"){botChance=0.75; botVel=350;}
+    if(d=="dificil"){botChance=0.9; botVel=250;}
+    if(d=="impossivel"){botChance=1; botVel=120;}
+}
+
+function novaLetra(){
+    atual=teclas[Math.floor(Math.random()*4)];
+    document.getElementById("letra").innerText=atual;
+    document.getElementById("letra").style.transform="scale(1.2)";
+    setTimeout(()=>{document.getElementById("letra").style.transform="scale(1)";},80);
+    letraStart = Date.now();
+}
+
+function atualizarBarraLetra(){
+    let elapsed = Date.now() - letraStart;
+    let pct = Math.max(0, 100 - (elapsed / letraDur * 100));
+    let barra = document.getElementById("letraTimer");
+    barra.style.width = pct+"%";
+    if(pct>50) barra.style.background='lime';
+    else if(pct>25) barra.style.background='yellow';
+    else barra.style.background='red';
+}
+
+function iniciarTreinoSolo(){
+    clearInterval(treinoInterval);
+    clearTimeout(letraTimeout);
+    let nivel = document.getElementById("treinoNivel").value;
+    letraDur = 1200;
+    if(nivel==="facil") letraDur=1200;
+    if(nivel==="medio") letraDur=900;
+    if(nivel==="dificil") letraDur=600;
+    if(nivel==="extremo") letraDur=400;
+
+    function proximaLetra(){
+        novaLetra();
+        letraTimeout = setTimeout(proximaLetra, letraDur);
+    }
+    proximaLetra();
+
+    treinoInterval = setInterval(atualizarBarraLetra,20);
+}
+
+function iniciar(){
+    if(ativo) return;
+    let modo = document.getElementById("modoSelect").value;
+    let tempoEscolhido = document.getElementById("tempoSelect").value;
+
+    // Mostrar ou esconder respiração
+    if(modo==="treino"){
+        document.getElementById("respContainer").style.display="none";
+        document.getElementById("respLabel").style.display="none";
+        document.getElementById("letraTimerContainer").style.display="block";
+    } else {
+        document.getElementById("respContainer").style.display="block";
+        document.getElementById("respLabel").style.display="block";
+        document.getElementById("letraTimerContainer").style.display="none"; // oculto no normal
+    }
+
+    if(tempoEscolhido!=="infinito"){
+        tempo = parseInt(tempoEscolhido);
+        document.getElementById("timer").innerText = tempo;
+    } else document.getElementById("timer").innerText = "∞";
+
+    salvarConfig();
+    if(modo==="normal") aplicarDificuldade();
+    ativo = true;
+
+    clearInterval(timerInterval); clearInterval(botInterval); clearInterval(treinoInterval); clearTimeout(letraTimeout);
+
+    timerInterval = setInterval(()=>{
+        if(!ativo) return;
+        if(tempoEscolhido!=="infinito"){
+            tempo--;
+            document.getElementById("timer").innerText = tempo;
+            if(tempo<=0){
+                ativo=false; clearInterval(timerInterval);
+                if(player>bot) document.getElementById("resultado").innerText="VOCÊ VENCEU";
+                else if(bot>player) document.getElementById("resultado").innerText="BOT VENCEU";
+                else document.getElementById("resultado").innerText="EMPATE";
+            }
+        }
+    },1000);
+
+    if(modo==="normal"){
+        function botLoop(){
+            if(!ativo) return;
+            if(Math.random()<botChance){
+                bot++;
+                document.getElementById("botScore").innerText=bot;
+            }
+            botInterval=setTimeout(botLoop, botVel);
+        }
+        botLoop();
+    } else if(modo==="treino"){
+        iniciarTreinoSolo();
+    }
+
+    if(modo==="normal"){
+        setInterval(()=>{
+            if(!ativo) return;
+            let diff = player-bot;
+            let velocidadeResp = 0.05*Math.abs(diff)+0.03;
+            if(diff>0) resp -= velocidadeResp;
+            if(diff<0) resp += velocidadeResp;
+            if(resp<0) resp=0;
+            if(resp>100) resp=100;
+            document.getElementById("resp").style.width=resp+"%";
+
+            if(resp===0 || resp===100){
+                ativo=false;
+                setTimeout(reiniciar, 800);
+            }
+        },150);
+    }
+}
+
+document.addEventListener("keydown",(e)=>{
+    if(!ativo) return;
+    let tecla = e.key.toUpperCase();
+    if(!["W","A","S","D"].includes(tecla)) return;
+    let modo = document.getElementById("modoSelect").value;
+    let box=document.getElementById("letraBox");
+
+    if(tecla===atual){
+        player++;
+        document.getElementById("playerScore").innerText=Math.floor(player);
+        box.style.borderColor="lime";
+        setTimeout(()=>{box.style.borderColor="white";},120);
+        if(modo==="treino"){ clearTimeout(letraTimeout); novaLetra(); iniciarTreinoSolo(); }
+        else novaLetra();
+    } else {
+        box.style.borderColor="red";
+        setTimeout(()=>{box.style.borderColor="white";},120);
+        if(modo==="treino"){
+            let nivel = document.getElementById("treinoNivel").value;
+            if(nivel==="medio") player=Math.max(player-1,0);
+            if(nivel==="dificil") player=Math.max(player-2,0);
+            if(nivel==="extremo") player=Math.max(player-3,0);
+            document.getElementById("playerScore").innerText=Math.floor(player);
+        }
+    }
+});
+
+function reiniciar(){
+    ativo=false;
+    player=0; bot=0; resp=50;
+    document.getElementById("playerScore").innerText=player;
+    document.getElementById("botScore").innerText=bot;
+    document.getElementById("resp").style.width=resp+"%";
+    document.getElementById("resultado").innerText="";
+    document.getElementById("letraTimer").style.width="100%";
+    clearInterval(timerInterval); clearInterval(botInterval); clearInterval(treinoInterval); clearTimeout(letraTimeout);
+    novaLetra();
+}
+
+novaLetra();
+document.getElementById("botScore").parentElement.style.display="inline";
+</script>
+</body>
+</html>
